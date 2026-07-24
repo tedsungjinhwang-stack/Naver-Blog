@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Env / secrets
+.env
+*.local.yaml
+config/config.yaml
+
+# Generated drafts & runtime data
+output/*
+!output/.gitkeep
+briefs/
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Test / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,16 @@
+# --- Core (required) ---
+requests>=2.31.0
+PyYAML>=6.0.1
+python-dotenv>=1.0.1
+beautifulsoup4>=4.12.3
+
+# 본문은 세션의 Claude(또는 사람)가 직접 작성 → LLM API 의존성 없음.
+
+# --- Optional (feature-gated; pipeline degrades gracefully if absent) ---
+# Google Trends collector
+pytrends>=4.9.2
+# Pretty CLI output
+rich>=13.7.1
+
+# --- Dev ---
+pytest>=8.0.0

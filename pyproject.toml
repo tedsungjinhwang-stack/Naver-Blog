@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nbpipe"
+version = "0.1.0"
+description = "네이버 블로그 자동 초안 파이프라인 (홈판/C-Rank/D.I.A. 최적화) — 경제·투자·부업·부동산"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31.0",
+    "PyYAML>=6.0.1",
+    "python-dotenv>=1.0.1",
+    "beautifulsoup4>=4.12.3",
+]
+
+[project.optional-dependencies]
+trends = ["pytrends>=4.9.2"]
+cli = ["rich>=13.7.1"]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+nbpipe = "nbpipe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
