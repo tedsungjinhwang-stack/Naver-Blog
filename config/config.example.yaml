@@ -47,3 +47,10 @@ output:
   dir: ./output
   formats: [markdown, html]   # 생성할 초안 포맷
   write_run_log: true         # SQLite 실행 로그 기록
+
+writing:
+  # 모든 초안에 고정할 '종결 어투' 규칙. 비워두면 기본 규칙(메르 방식) 사용.
+  # 기본: 분석·서술은 반말 평서체, 독자에게 직접 말 거는 문장만 존댓말.
+  # 다르게 통일하고 싶으면 아래를 채워 덮어쓰세요. 예)
+  # voice_rule: "모든 문장을 '~습니다' 존댓말 대화체로 통일한다."
+  voice_rule: ""

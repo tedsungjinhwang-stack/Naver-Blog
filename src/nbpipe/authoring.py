@@ -105,12 +105,15 @@ def parse_authored_post(path: str | Path) -> PostDraft:
     )
 
 
-def render_brief(plan: TopicPlan, seo_cfg: dict[str, Any], style_ref: str = "") -> str:
+def render_brief(
+    plan: TopicPlan, seo_cfg: dict[str, Any], style_ref: str = "", voice_rule: str = ""
+) -> str:
     """세션/사람이 글을 쓸 수 있게 '작성 브리핑 + 채우기 템플릿'을 만든다.
 
     style_ref: knowledge/style_reference.md(레퍼런스 톤앤매너 가이드) 내용을 넣으면
-    브리핑 상단 가이드에 함께 주입된다. 반환 문자열을 파일로 저장 → 본문만 채우면
-    곧바로 ingest 가능.
+    브리핑 상단 가이드에 함께 주입된다.
+    voice_rule: 어투 통일 규칙(빈 값이면 기본 규칙). 반환 문자열을 파일로 저장 →
+    본문만 채우면 곧바로 ingest 가능.
     """
     from nbpipe.generation.prompts import build_system_prompt  # 지연 import(순환 방지)
 
@@ -118,7 +121,7 @@ def render_brief(plan: TopicPlan, seo_cfg: dict[str, Any], style_ref: str = "") 
     if plan.intent == Intent.HOMEFEED:
         body_min = max(body_min, 2000)
 
-    rules = build_system_prompt(plan.niche, seo_cfg, plan.intent)
+    rules = build_system_prompt(plan.niche, seo_cfg, plan.intent, voice_rule=voice_rule)
     if style_ref.strip():
         rules = rules + "\n\n[레퍼런스 톤앤매너 가이드]\n" + style_ref.strip()
     fm = {

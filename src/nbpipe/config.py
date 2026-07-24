@@ -66,6 +66,10 @@ _DEFAULTS: dict[str, Any] = {
         "formats": ["markdown", "html"],
         "write_run_log": True,
     },
+    # 작성 어투 규칙(빈 값이면 prompts.DEFAULT_VOICE_RULE 사용)
+    "writing": {
+        "voice_rule": "",
+    },
 }
 
 
@@ -116,6 +120,10 @@ class Config:
     @property
     def output(self) -> dict[str, Any]:
         return self.data["output"]
+
+    @property
+    def writing(self) -> dict[str, Any]:
+        return self.data.get("writing", {})
 
     @property
     def output_dir(self) -> Path:

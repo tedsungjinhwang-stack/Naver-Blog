@@ -11,6 +11,14 @@ from typing import Any
 from nbpipe.models import Intent, Niche
 
 
+# ---- 어투 통일 규칙 (메르 방식: 평서체 본문 + 독자 말걸기만 존댓말) ----
+# config 의 writing.voice_rule 로 덮어쓸 수 있다.
+DEFAULT_VOICE_RULE = """[어투 통일 — 반드시 일관되게]
+- 기본 서술(사실·분석·논리 전개)은 '반말 평서체'로 쓴다: "~다 / ~이다 / ~로 보인다".
+- 독자에게 '직접 말을 거는 문장'만 존댓말로 쓴다: 도입 인사, 소제목 전환 안내, 마무리 당부·전망 코멘트, 댓글 유도 질문("~해보겠습니다 / ~바랍니다 / 여러분은 어떠신가요").
+- 이 규칙을 글 전체에 똑같이 적용한다. 분석·서술 문장 사이에 존댓말을 규칙 없이 섞지 않는다. (메르/ranto 방식)"""
+
+
 # ---- 공통 규칙 (홈판/C-Rank/DIA + 진정성/정직/컴플라이언스) ----
 BASE_SYSTEM_RULES = """당신은 네이버 블로그 '홈판(홈피드)' 노출과 검색 상위노출을 다수 성공시킨 한국어 블로그 전문 작가입니다.
 아래 원칙에 따라, 사람이 검토 후 그대로 발행할 수 있는 고품질 초안을 작성하세요.
@@ -92,6 +100,7 @@ def build_system_prompt(
     seo_cfg: dict[str, Any],
     intent: Intent = Intent.HOMEFEED,
     knowledge_excerpt: str = "",
+    voice_rule: str = "",
 ) -> str:
     body_min = seo_cfg.get("body_char_min", 1700)
     if intent == Intent.HOMEFEED:
@@ -107,6 +116,7 @@ def build_system_prompt(
         f"~{seo_cfg.get('primary_keyword_max_count', 6)}회 자연스럽게 (스터핑 금지)\n"
     )
     parts = [
+        (voice_rule.strip() or DEFAULT_VOICE_RULE),
         BASE_SYSTEM_RULES,
         INTENT_GUIDANCE.get(intent, ""),
         NICHE_GUIDANCE.get(niche, ""),

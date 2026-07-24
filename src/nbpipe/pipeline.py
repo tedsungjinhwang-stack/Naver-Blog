@@ -158,9 +158,12 @@ class Pipeline:
         briefs_dir = self.config.output_dir / "briefs"
         briefs_dir.mkdir(parents=True, exist_ok=True)
         style_ref = self._style_ref()
+        voice_rule = self.config.writing.get("voice_rule", "")
         out: list[tuple[TopicPlan, Path]] = []
         for i, plan in enumerate(plans, 1):
-            content = render_brief(plan, self.config.seo, style_ref=style_ref)
+            content = render_brief(
+                plan, self.config.seo, style_ref=style_ref, voice_rule=voice_rule,
+            )
             slug = _slugify(plan.primary_keyword)
             path = briefs_dir / f"{niche.value}_{i:02d}_{slug}_brief.md"
             path.write_text(content, encoding="utf-8")
