@@ -123,15 +123,24 @@ class Pipeline:
         draft.compliance = self.compliance.check(text, draft.niche)
         return draft
 
-    def _style_ref(self, limit: int = 6000) -> str:
-        """레퍼런스 톤앤매너 가이드(knowledge/style_reference.md)를 로드."""
+    def _style_ref(self, limit: int = 14000) -> str:
+        """레퍼런스 톤앤매너 가이드(knowledge/style_reference.md)를 로드.
+
+        부록(블로그별 상세 프로파일)은 참고용이라 브리핑엔 넣지 않고,
+        본 가이드(섹션 0~8)만 주입한다.
+        """
         p = self.config.root / "knowledge" / "style_reference.md"
         if not p.exists():
             return ""
         try:
-            return p.read_text(encoding="utf-8")[:limit]
+            text = p.read_text(encoding="utf-8")
         except Exception:
             return ""
+        marker = "# 부록:"
+        idx = text.find(marker)
+        if idx != -1:
+            text = text[:idx].rstrip()
+        return text[:limit]
 
     # ---- 3) 세션/수동 작성 경로 ----
     def make_brief(
