@@ -45,7 +45,8 @@ seo:
 
 output:
   dir: ./output
-  formats: [markdown, html]   # 생성할 초안 포맷
+  # markdown=검토용, html=미리보기용, naver_text=네이버 붙여넣기용(.naver.txt)
+  formats: [markdown, html, naver_text]
   write_run_log: true         # SQLite 실행 로그 기록
 
 writing:

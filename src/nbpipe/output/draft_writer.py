@@ -1,8 +1,11 @@
-"""PostDraft → 검토용 Markdown + 붙여넣기용 HTML 파일 출력.
+"""PostDraft → 검토용 Markdown + 미리보기 HTML + 네이버 붙여넣기용 텍스트 출력.
 
-발행은 사람이 직접 한다. 따라서 산출물은 두 가지:
-  1) *.md   — 메타/SEO리포트/이미지가이드/발행체크리스트까지 포함한 검토용 문서
-  2) *.html — 네이버 스마트에디터에 그대로 붙여넣을 수 있는 정갈한 본문 HTML
+발행은 사람이 직접 한다. 따라서 산출물은 세 가지:
+  1) *.md        — 메타/SEO리포트/이미지가이드/발행체크리스트까지 포함한 검토용 문서
+  2) *.html      — 브라우저에서 미리보기 가능한 정갈한 본문 HTML
+  3) *.naver.txt — 네이버 스마트에디터에 그대로 붙여넣는 평문(마크다운 기호 제거,
+                   [소제목]·[표]·[이미지] 자리 표시). 스마트에디터가 마크다운/HTML
+                   import을 지원하지 않으므로 실제 붙여넣기는 이 파일을 쓴다.
 """
 from __future__ import annotations
 
@@ -56,6 +59,22 @@ def _inline(text: str) -> str:
     # 이탤릭: 진짜 마크다운 강조만. 각주/곱셈용 별표(예: "30만원* 기준", "이자 * 원금")는
     # 감싸지 않도록, 별표가 단어문자/공백에 붙어있으면 매칭에서 제외한다.
     text = re.sub(r"(?<![\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\w*])", r"<em>\1</em>", text)
+    return text
+
+
+_CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+
+
+def _circ(n: int) -> str:
+    return _CIRCLED[n - 1] if 1 <= n <= len(_CIRCLED) else f"({n})"
+
+
+def _strip_md(text: str) -> str:
+    """네이버 붙여넣기용: 마크다운 강조/코드/링크 기호를 텍스트만 남기고 제거."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)          # **굵게**
+    text = re.sub(r"(?<![\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\w*])", r"\1", text)  # *기울임*
+    text = re.sub(r"`([^`]+)`", r"\1", text)               # `코드`
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)   # [텍스트](url)
     return text
 
 
@@ -208,8 +227,117 @@ class DraftWriter:
             tags=tags,
         )
 
+    # --- 네이버 텍스트(붙여넣기용) ---
+    def _body_to_naver(self, markdown: str) -> tuple[list[str], list[int]]:
+        """본문 마크다운 → 네이버용 평문 줄 목록 + [소제목] 줄의 인덱스 목록."""
+        lines = markdown.splitlines()
+        out: list[str] = []
+        heading_idxs: list[int] = []
+        i, n = 0, len(lines)
+        while i < n:
+            s = lines[i].strip()
+            if not s:
+                out.append("")
+                i += 1
+                continue
+            h = re.match(r"^#{1,4}\s+(.*)$", s)
+            if h:
+                heading_idxs.append(len(out))
+                out.append(f"[소제목] {_strip_md(h.group(1).strip())}")
+                i += 1
+                continue
+            # 표: 연속된 | ... | 줄을 묶어서 처리
+            if re.match(r"^\|.*\|$", s):
+                rows: list[str] = []
+                while i < n and re.match(r"^\|.*\|$", lines[i].strip()):
+                    rows.append(lines[i].strip())
+                    i += 1
+                out.append("[표] (스마트에디터 '표' 기능으로 재구성)")
+                for r in rows:
+                    cells = [c.strip() for c in r.strip().strip("|").split("|")]
+                    if cells and all(re.match(r"^:?-{2,}:?$", c) for c in cells):
+                        continue  # |---|---| 구분선
+                    out.append("  " + " | ".join(_strip_md(c) for c in cells))
+                continue
+            cl = re.match(r"^[-*]\s+\[[ xX]\]\s+(.*)$", s)
+            if cl:
+                out.append("☐ " + _strip_md(cl.group(1)))
+                i += 1
+                continue
+            b = re.match(r"^[-*]\s+(.*)$", s)
+            if b:
+                out.append("· " + _strip_md(b.group(1)))
+                i += 1
+                continue
+            nm = re.match(r"^(\d+)\.\s+(.*)$", s)
+            if nm:
+                out.append(f"{nm.group(1)}. " + _strip_md(nm.group(2)))
+                i += 1
+                continue
+            if re.match(r"^(-{3,}|_{3,}|\*{3,})$", s):  # 수평선
+                i += 1
+                continue
+            if s.startswith(">"):
+                out.append(_strip_md(s.lstrip(">").strip()))
+                i += 1
+                continue
+            out.append(_strip_md(s))
+            i += 1
+        return out, heading_idxs
+
+    def _render_naver_text(self, draft: PostDraft) -> str:
+        body, heading_idxs = self._body_to_naver(draft.body_markdown.strip())
+
+        # 이미지 마커 배치(위치 문자열 최대한 해석, 못 하면 맨 뒤 목록)
+        intro_marks: list[str] = []
+        after: dict[int, list[str]] = {}
+        tail_marks: list[str] = []
+        for idx, im in enumerate(draft.image_prompts, 1):
+            mark = f"[이미지{_circ(idx)}] {im.alt or im.prompt}"
+            pos = im.position or ""
+            msub = re.search(r"소제목\s*(\d+)", pos)
+            if msub and 1 <= int(msub.group(1)) <= len(heading_idxs):
+                after.setdefault(heading_idxs[int(msub.group(1)) - 1], []).append(mark)
+            elif "도입" in pos:
+                intro_marks.append(mark)
+            elif ("마무리" in pos or "끝" in pos) and heading_idxs:
+                after.setdefault(max(heading_idxs[-1] - 1, 0), []).append(mark)
+            else:
+                tail_marks.append(f"{mark}  (위치: {pos})" if pos else mark)
+
+        body_out: list[str] = []
+        for i, line in enumerate(body):
+            body_out.append(line)
+            for mk in after.get(i, []):
+                body_out.append(mk)
+
+        P: list[str] = []
+        P.append("※ 네이버 스마트에디터 붙여넣기용")
+        P.append("   1) 아래 본문을 그대로 복사해 붙여넣기")
+        P.append("   2) [소제목] 줄은 툴바에서 '제목' 스타일 지정 (대괄호 표기는 지우기)")
+        P.append("   3) [이미지] 자리엔 사진 업로드, [표]는 '표' 기능으로 재구성")
+        P.append("   4) 맨 아래 태그는 발행 시 태그란에 입력")
+        P.append("─" * 24)
+        P.append("")
+        P.append(f"[제목] {_strip_md(draft.title)}")
+        P.append("")
+        if draft.summary:
+            P.append(_strip_md(draft.summary.strip()))
+        P.extend(intro_marks)
+        P.append("")
+        P.extend(body_out)
+        P.append("")
+        if tail_marks:
+            P.append("[이미지 위치(본문 흐름에 맞게 배치)]")
+            P.extend(tail_marks)
+            P.append("")
+        P.append("[태그] " + " ".join("#" + t for t in draft.tags))
+        # 과도한 연속 빈 줄 정리
+        text = "\n".join(P)
+        return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
+
     def write(self, draft: PostDraft, formats: list[str] | None = None) -> list[Path]:
-        formats = formats or ["markdown", "html"]
+        formats = formats or ["markdown", "html", "naver_text"]
         base = self._basename(draft)
         written: list[Path] = []
 
@@ -220,6 +348,10 @@ class DraftWriter:
         if "html" in formats:
             p = self.output_dir / f"{base}.html"
             p.write_text(self._render_html(draft), encoding="utf-8")
+            written.append(p)
+        if "naver_text" in formats or "txt" in formats:
+            p = self.output_dir / f"{base}.naver.txt"
+            p.write_text(self._render_naver_text(draft), encoding="utf-8")
             written.append(p)
         return written
 

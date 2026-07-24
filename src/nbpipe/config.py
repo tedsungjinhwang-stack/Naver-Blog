@@ -63,7 +63,8 @@ _DEFAULTS: dict[str, Any] = {
     },
     "output": {
         "dir": "./output",
-        "formats": ["markdown", "html"],
+        # markdown=검토용, html=미리보기용, naver_text=네이버 붙여넣기용(.naver.txt)
+        "formats": ["markdown", "html", "naver_text"],
         "write_run_log": True,
     },
     # 작성 어투 규칙(빈 값이면 prompts.DEFAULT_VOICE_RULE 사용)
