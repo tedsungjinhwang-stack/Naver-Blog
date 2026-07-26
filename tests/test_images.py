@@ -20,6 +20,19 @@ def test_unknown_keyword_falls_back_to_niche_default():
     assert q == NICHE_DEFAULTS[Niche.SIDEJOB][:3]
 
 
+def test_specific_trigger_beats_shorter_one():
+    """'쿠팡파트너스'(제휴마케팅)가 '쿠팡이츠'(배달)로 잘못 잡히지 않아야 한다."""
+    q = queries_for(Niche.SIDEJOB, ["쿠팡파트너스"])
+    assert "smartphone online shopping" in q
+    assert "food delivery courier" not in q
+
+
+def test_shopping_shorts_mapping():
+    for kw in (["유튜브 쇼핑 쇼츠"], ["쇼핑쇼츠"], ["제휴마케팅"]):
+        q = queries_for(Niche.SIDEJOB, kw)
+        assert "smartphone online shopping" in q, kw
+
+
 def test_queries_respect_limit():
     assert len(queries_for(Niche.INVESTING, ["코스피"], limit=2)) == 2
 

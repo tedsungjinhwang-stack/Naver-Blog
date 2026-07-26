@@ -79,13 +79,18 @@ TOPIC_QUERIES: dict[Niche, list[tuple[tuple[str, ...], list[str]]]] = {
           "computer technology abstract"]),
     ],
     Niche.SIDEJOB: [
-        (("배달", "라이더", "쿠팡", "배민"),
+        # '쿠팡'만 두면 '쿠팡파트너스'(제휴마케팅)까지 배달로 잡히므로 구체적으로 적는다
+        (("배달", "라이더", "쿠팡이츠", "배민", "배달의민족"),
          ["food delivery courier", "delivery scooter city",
           "delivery bag motorcycle"]),
         (("스마트스토어", "쇼핑몰", "이커머스", "위탁판매", "셀러"),
          ["online shop ecommerce", "packing parcel boxes", "small business shipping"]),
         (("블로그", "글쓰기", "애드포스트", "포스팅"),
          ["blogging laptop writing", "writing desk notebook", "typing keyboard work"]),
+        (("쇼핑쇼츠", "쇼핑 쇼츠", "유튜브쇼핑", "유튜브 쇼핑", "제휴마케팅",
+          "쿠팡파트너스", "어필리에이트", "제휴링크", "상품태그"),
+         ["smartphone online shopping", "product review filming",
+          "unboxing product camera", "mobile shopping cart phone"]),
         (("유튜브", "영상", "쇼츠", "편집"),
          ["video camera studio", "video editing desk", "content creator filming"]),
         (("재택", "부업", "투잡", "사이드"),
@@ -132,12 +137,20 @@ def queries_for(
     """
     haystack = " ".join(k for k in (keywords or []) if k).lower()
 
-    picked: list[str] = []
+    # 여러 주제가 걸리면 '더 구체적인(=긴) 트리거'가 이기게 한다.
+    # 예) '쿠팡파트너스'는 배달('쿠팡이츠')이 아니라 제휴마케팅으로 잡혀야 한다.
+    matches: list[tuple[int, list[str]]] = []
     for triggers, qs in TOPIC_QUERIES.get(niche, []):
-        if any(t.lower() in haystack for t in triggers):
-            for q in qs:
-                if q not in picked:
-                    picked.append(q)
+        hits = [t for t in triggers if t.lower() in haystack]
+        if hits:
+            matches.append((max(len(t) for t in hits), qs))
+    matches.sort(key=lambda m: m[0], reverse=True)
+
+    picked: list[str] = []
+    for _, qs in matches:
+        for q in qs:
+            if q not in picked:
+                picked.append(q)
 
     for q in NICHE_DEFAULTS.get(niche, []):
         if len(picked) >= limit:
