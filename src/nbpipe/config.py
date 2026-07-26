@@ -71,6 +71,15 @@ _DEFAULTS: dict[str, Any] = {
     "writing": {
         "voice_rule": "",
     },
+    # 이미지 자동 수집 (ingest 시 라이선스 안전한 스톡 이미지를 함께 받아둔다)
+    "images": {
+        "enabled": True,
+        "source": "openverse",   # openverse(키 불필요) / pexels / unsplash
+        "per_post": 2,           # 스톡 장수. 나머지는 직접 제작/촬영으로 채운다
+        "license": None,         # 예: "cc0,pdm" (출처표기 의무 없는 것만)
+        "allow_sharealike": False,
+        "dir": "",               # 비우면 <output_dir>/images
+    },
 }
 
 
@@ -125,6 +134,18 @@ class Config:
     @property
     def writing(self) -> dict[str, Any]:
         return self.data.get("writing", {})
+
+    @property
+    def images(self) -> dict[str, Any]:
+        return self.data.get("images", {})
+
+    @property
+    def images_dir(self) -> Path:
+        raw = (self.images.get("dir") or "").strip()
+        if raw:
+            p = Path(raw).expanduser()
+            return p if p.is_absolute() else (self.root / p)
+        return self.output_dir / "images"
 
     @property
     def output_dir(self) -> Path:

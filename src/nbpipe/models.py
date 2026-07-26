@@ -168,6 +168,51 @@ class ImagePrompt:
     caption: str = ""
 
 
+# 출처 표기 의무가 없는 라이선스(퍼블릭 도메인 계열 + 자체 라이선스)
+_NO_ATTRIBUTION = {"cc0", "pdm", "pexels", "unsplash"}
+
+
+@dataclass
+class FetchedImage:
+    """API로 수집한 실제 이미지 파일 + 라이선스/출처 정보."""
+
+    title: str
+    url: str                     # 원본 이미지 URL
+    license_code: str            # cc0 / pdm / by / by-sa / pexels / unsplash
+    source: str                  # flickr, wikimedia, rawpixel, pexels ...
+    query: str = ""              # 어떤 검색어로 찾았는지
+    page_url: str = ""           # 원저작물 페이지
+    creator: str = ""
+    license_url: str = ""
+    file: str = ""               # 저장된 파일명(다운로드 후 채워짐)
+    path: str = ""               # 저장 경로
+
+    @property
+    def needs_attribution(self) -> bool:
+        return self.license_code.lower() not in _NO_ATTRIBUTION
+
+    def credit_line(self) -> str:
+        """블로그 하단에 붙일 출처 문구."""
+        if not self.needs_attribution:
+            return (f"{self.title} — {self.source} "
+                    f"({self.license_code.upper()}, 출처 표기 의무 없음)")
+        parts = [f'"{self.title}"', f"by {self.creator or 'Unknown'}"]
+        if self.page_url:
+            parts.append(f"({self.page_url})")
+        parts.append(f"/ {self.license_code.upper()}")
+        if self.license_url:
+            parts.append(self.license_url)
+        return " ".join(parts)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "file": self.file, "title": self.title, "creator": self.creator,
+            "license": self.license_code, "license_url": self.license_url,
+            "source": self.source, "page_url": self.page_url,
+            "query": self.query, "needs_attribution": self.needs_attribution,
+        }
+
+
 @dataclass
 class PostDraft:
     """최종 초안 산출물."""
@@ -181,6 +226,7 @@ class PostDraft:
     body_markdown: str = ""
     tags: list[str] = field(default_factory=list)
     image_prompts: list[ImagePrompt] = field(default_factory=list)
+    stock_images: list[FetchedImage] = field(default_factory=list)  # API 수집 이미지
     summary: str = ""                                    # 도입부/요약
     meta: dict[str, Any] = field(default_factory=dict)   # 모델/토큰/키워드 등
     seo: SeoReport | None = None

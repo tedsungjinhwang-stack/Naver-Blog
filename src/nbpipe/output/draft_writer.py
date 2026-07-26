@@ -170,6 +170,23 @@ class DraftWriter:
                     L.append(f"    - 캡션: {im.caption}")
             L.append("")
 
+        # 자동 수집한 스톡 이미지
+        if draft.stock_images:
+            need = [im for im in draft.stock_images if im.needs_attribution]
+            L.append("## 📷 자동 수집 이미지 (라이선스 확인됨)")
+            L.append("")
+            for im in draft.stock_images:
+                mark = "출처 표기 필요" if im.needs_attribution else "표기 의무 없음"
+                L.append(f"- `{im.file}` — {im.license_code.upper()} · {mark}")
+                L.append(f"    - 경로: `{im.path}`")
+                L.append(f"    - 검색어: {im.query}")
+                if im.needs_attribution:
+                    L.append(f"    - 출처 문구: {im.credit_line()}")
+            if need:
+                L.append("")
+                L.append(f"> ⚠️ {len(need)}장은 본문 하단에 출처 문구를 반드시 넣어야 합니다.")
+            L.append("")
+
         # SEO 리포트
         if draft.seo:
             L.append("## 🔎 SEO 리포트")
@@ -292,6 +309,20 @@ class DraftWriter:
         intro_marks: list[str] = []
         after: dict[int, list[str]] = {}
         tail_marks: list[str] = []
+
+        # 자동 수집 이미지는 '이미 파일이 있는' 것이므로 [사진A/B…]로 구분 표기한다.
+        # (직접 만들어야 하는 자리는 [이미지①②…] 로 남는다.)
+        # 첫 장은 대표 이미지로 도입부에, 나머지는 본문 중간 배치 안내로.
+        for si, im in enumerate(draft.stock_images):
+            letter = chr(ord("A") + si) if si < 26 else str(si + 1)
+            label = f"[사진{letter}] {im.file}"
+            if im.needs_attribution:
+                label += "  (출처 표기 필요)"
+            if si == 0:
+                intro_marks.append(label + "  ← 대표 이미지")
+            else:
+                tail_marks.append(f"{label}  (본문 중간 적절한 위치)")
+
         for idx, im in enumerate(draft.image_prompts, 1):
             mark = f"[이미지{_circ(idx)}] {im.alt or im.prompt}"
             pos = im.position or ""
@@ -315,8 +346,11 @@ class DraftWriter:
         P.append("※ 네이버 스마트에디터 붙여넣기용")
         P.append("   1) 아래 본문을 그대로 복사해 붙여넣기")
         P.append("   2) [소제목] 줄은 툴바에서 '제목' 스타일 지정 (대괄호 표기는 지우기)")
-        P.append("   3) [이미지] 자리엔 사진 업로드, [표]는 '표' 기능으로 재구성")
-        P.append("   4) 맨 아래 태그는 발행 시 태그란에 입력")
+        P.append("   3) [사진X] = 수집 완료된 파일이니 그대로 업로드 "
+                 "/ [이미지N] = 직접 만들거나 촬영할 자리")
+        P.append("   4) [표]는 스마트에디터 '표' 기능으로 재구성")
+        P.append("   5) 출처 표기가 필요한 사진은 하단 [이미지 출처] 문구를 본문에 포함")
+        P.append("   6) 맨 아래 태그는 발행 시 태그란에 입력")
         P.append("─" * 24)
         P.append("")
         P.append(f"[제목] {_strip_md(draft.title)}")
@@ -331,6 +365,14 @@ class DraftWriter:
             P.append("[이미지 위치(본문 흐름에 맞게 배치)]")
             P.extend(tail_marks)
             P.append("")
+        # 출처 표기가 필요한 이미지는 본문 하단에 그대로 붙일 문구를 넣는다
+        credited = [im for im in draft.stock_images if im.needs_attribution]
+        if credited:
+            P.append("[이미지 출처] (본문 맨 아래에 그대로 포함)")
+            for im in credited:
+                P.append(f"  {im.credit_line()}")
+            P.append("")
+
         P.append("[태그] " + " ".join("#" + t for t in draft.tags))
         # 과도한 연속 빈 줄 정리
         text = "\n".join(P)

@@ -15,7 +15,9 @@ from nbpipe.analysis import KeywordSelector
 from nbpipe.analysis.keyword_selector import MergedKeyword
 from nbpipe.collectors import DISCOVERY_COLLECTORS, NaverDataLabCollector
 from nbpipe.config import Config
-from nbpipe.models import Intent, Keyword, Niche, PostDraft, TopicPlan
+from nbpipe.models import (
+    FetchedImage, Intent, Keyword, Niche, PostDraft, TopicPlan,
+)
 from nbpipe.niche_config import NicheConfig, load_niche_config
 from nbpipe.output import DraftWriter
 from nbpipe.seo import ComplianceChecker, SeoScorer
@@ -170,12 +172,47 @@ class Pipeline:
             out.append((plan, path))
         return out
 
-    def ingest(self, path: str | Path) -> GenerationResult:
-        """세션/사람이 쓴 작성 파일 → 검수 + 초안 출력."""
+    def collect_images(self, draft: PostDraft) -> list[FetchedImage]:
+        """글에 붙일 스톡 이미지를 라이선스 조건에 맞게 수집한다.
+
+        네트워크 실패는 초안 출력을 막지 않는다(빈 목록 반환).
+        """
+        cfg = self.config.images
+        if not cfg.get("enabled", True):
+            return []
+        count = int(cfg.get("per_post", 2) or 0)
+        if count <= 0:
+            return []
+
+        from nbpipe.media import fetch_for_draft
+
+        keywords = [draft.primary_keyword, draft.title]
+        keywords += draft.meta.get("secondary_keywords", []) or []
+        keywords += draft.tags
+        images = fetch_for_draft(
+            niche=draft.niche,
+            keywords=keywords,
+            dest=self.config.images_dir,
+            count=count,
+            source=cfg.get("source", "openverse"),
+            license_filter=cfg.get("license"),
+            allow_sharealike=bool(cfg.get("allow_sharealike", False)),
+            stem_prefix=f"{draft.niche.value}_{draft.slug()}",
+        )
+        draft.stock_images = images
+        return images
+
+    def ingest(self, path: str | Path, *, with_images: bool | None = None
+               ) -> GenerationResult:
+        """세션/사람이 쓴 작성 파일 → 이미지 수집 + 검수 + 초안 출력."""
         from nbpipe.authoring import parse_authored_post
 
         draft = parse_authored_post(path)
         draft = self.finalize(draft)
+        if with_images is None:
+            with_images = bool(self.config.images.get("enabled", True))
+        if with_images:
+            self.collect_images(draft)
         files, run_id = self.emit(draft)
         plan = TopicPlan(
             niche=draft.niche, primary_keyword=draft.primary_keyword,

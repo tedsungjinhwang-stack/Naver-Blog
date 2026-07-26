@@ -49,6 +49,17 @@ output:
   formats: [markdown, html, naver_text]
   write_run_log: true         # SQLite 실행 로그 기록
 
+images:
+  # ingest 시 라이선스 안전한 스톡 이미지를 자동 수집해 초안에 붙인다.
+  enabled: true
+  source: openverse        # openverse(키 불필요) / pexels / unsplash(키 필요)
+  per_post: 2              # 스톡 장수. 나머지는 직접 제작·촬영으로 채우는 걸 권장
+  license: null            # 예: "cc0,pdm" → 출처 표기 의무 없는 것만
+  allow_sharealike: false  # BY-SA 포함 여부(기본 제외)
+  dir: ""                  # 비우면 <output.dir>/images
+  # NC(비영리)·ND(변경금지)는 항상 제외한다. 애드포스트 수익화 시 상업적 이용에
+  # 해당하고, 크롭·리사이즈가 필요하기 때문.
+
 writing:
   # 모든 초안에 고정할 '종결 어투' 규칙. 비워두면 기본 규칙(메르 방식) 사용.
   # 기본: 도입부 1~2문장만 존댓말, 그 이후 본문·마무리까지 전부 개조식 음슴체(~함/~됨/~임).

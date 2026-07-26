@@ -147,8 +147,13 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
     cfg = load_config(args.config)
     pipe = Pipeline(cfg)
+    with_images = None
+    if getattr(args, "no_images", False):
+        with_images = False
+    elif getattr(args, "images", False):
+        with_images = True
     try:
-        res = pipe.ingest(args.file)
+        res = pipe.ingest(args.file, with_images=with_images)
     except (ValueError, FileNotFoundError) as exc:
         _p(f"[오류] {exc}")
         pipe.close()
@@ -165,6 +170,12 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _p("   ⛔ 컴플라이언스 확인필요:")
         for c in d.compliance.blocks():
             _p(f"     - {c.label}: {c.value}")
+    if d.stock_images:
+        need = sum(1 for i in d.stock_images if i.needs_attribution)
+        _p(f"   🖼️ 수집 이미지: {len(d.stock_images)}장"
+           + (f" (출처 표기 필요 {need}장)" if need else " (표기 의무 없음)"))
+        for im in d.stock_images:
+            _p(f"      · {im.file} [{im.license_code.upper()}] ← {im.query}")
     for f in res.files:
         _p(f"   📄 {f}")
     pipe.close()
@@ -228,6 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ing = sub.add_parser("ingest", help="작성한 글(front-matter+본문) 검수→초안 출력")
     p_ing.add_argument("file", help="작성 파일 경로(.md)")
+    g_img = p_ing.add_mutually_exclusive_group()
+    g_img.add_argument("--no-images", action="store_true",
+                       help="이미지 자동 수집 건너뛰기")
+    g_img.add_argument("--images", action="store_true",
+                       help="설정과 무관하게 이미지 수집 강제")
     p_ing.set_defaults(func=cmd_ingest)
 
     p_hist = sub.add_parser("history", help="최근 실행 기록")
