@@ -15,11 +15,11 @@ image_prompts:
     alt: 고점 대비 낙폭 차트
     prompt: 사상 최고가 대비 현재까지의 하락률을 표시한 직접 만든 차트
   - position: 소제목2 아래
-    alt: 0.618 피보나치 되돌림 도식
-    prompt: 저점과 고점 사이에 0.382·0.5·0.618 되돌림 선을 그은 차트
+    alt: 0.618 피보나치 되돌림 레벨 계산 도표
+    prompt: "[제작완료] output/images/kospi_retracement.png — tools/make_charts.py로 직접 생성"
   - position: 소제목3 아래
-    alt: 시가총액 상위 쏠림 그래프
-    prompt: 삼성전자·SK하이닉스가 지수 시총에서 차지하는 비중을 표시한 직접 만든 그래프
+    alt: 삼성전자·SK하이닉스 지수 시총 비중 도넛 차트
+    prompt: "[제작완료] output/images/kospi_concentration.png — tools/make_charts.py로 직접 생성"
   - position: 소제목4 아래
     alt: 매물대와 되돌림 겹치는 구간
     prompt: 거래량 프로파일(매물대)과 0.618 선이 겹치는 구간을 표시한 차트

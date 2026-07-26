@@ -11,6 +11,8 @@ beautifulsoup4>=4.12.3
 pytrends>=4.9.2
 # Pretty CLI output
 rich>=13.7.1
+# 직접 제작 차트 생성 (tools/make_charts.py) — 한글은 fonts-nanum 필요
+matplotlib>=3.7
 
 # --- Dev ---
 pytest>=8.0.0
