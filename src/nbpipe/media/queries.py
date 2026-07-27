@@ -87,10 +87,11 @@ TOPIC_QUERIES: dict[Niche, list[tuple[tuple[str, ...], list[str]]]] = {
          ["online shop ecommerce", "packing parcel boxes", "small business shipping"]),
         (("블로그", "글쓰기", "애드포스트", "포스팅"),
          ["blogging laptop writing", "writing desk notebook", "typing keyboard work"]),
+        # 'online shopping' 류는 저품질 클립아트가 많이 걸려서 촬영·리뷰 쪽 표현을 쓴다
         (("쇼핑쇼츠", "쇼핑 쇼츠", "유튜브쇼핑", "유튜브 쇼핑", "제휴마케팅",
           "쿠팡파트너스", "어필리에이트", "제휴링크", "상품태그"),
-         ["smartphone online shopping", "product review filming",
-          "unboxing product camera", "mobile shopping cart phone"]),
+         ["product review filming", "unboxing product camera",
+          "smartphone tripod filming", "content creator product photography"]),
         (("유튜브", "영상", "쇼츠", "편집"),
          ["video camera studio", "video editing desk", "content creator filming"]),
         (("재택", "부업", "투잡", "사이드"),

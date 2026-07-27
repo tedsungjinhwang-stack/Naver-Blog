@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -150,10 +151,48 @@ def chart_concentration(out: Path) -> Path:
     return p
 
 
+def chart_affiliate_breakeven(out: Path) -> Path:
+    """객단가별로 목표 수익을 만들려면 몇 건을 팔아야 하는지."""
+    target = 200_000          # 목표 월 수익(원)
+    rate = 0.15               # 제휴 수수료율
+    prices = [10_000, 30_000, 50_000, 100_000]
+    counts = [math.ceil(target / (p * rate)) for p in prices]
+
+    fig, ax = plt.subplots(figsize=(8, 5.2), dpi=200)
+    labels = [f"{p // 10000}만원" for p in prices]
+    bars = ax.bar(labels, counts, color=["#e0503f", "#ef8a7d", "#7aa7e8", "#2f6fdb"],
+                  width=0.58, zorder=3)
+    for b, c in zip(bars, counts):
+        ax.text(b.get_x() + b.get_width() / 2, c + max(counts) * 0.03,
+                f"{c:,}건", ha="center", fontsize=13, fontweight="bold",
+                color=C_TEXT)
+
+    ax.set_title(f"월 {target // 10000}만원 만들려면 몇 개 팔아야 하나",
+                 fontsize=17, fontweight="bold", color=C_TEXT, pad=18)
+    ax.text(0.5, 1.01, f"제휴 수수료 {rate:.0%} 가정 · 객단가별 필요 판매 건수",
+            transform=ax.transAxes, ha="center", va="bottom",
+            fontsize=11, color=C_MUTED)
+    ax.set_ylim(0, max(counts) * 1.18)
+    ax.set_yticks([])
+    ax.grid(axis="y", color=C_GRID, zorder=0)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(C_GRID)
+    ax.tick_params(axis="x", labelsize=12.5, colors=C_TEXT, length=0)
+    ax.text(0.5, -0.115, "객단가 · ※ 수수료율은 상품·브랜드마다 다르므로 발행 시점 기준 확인 필요",
+            transform=ax.transAxes, ha="center", fontsize=9, color=C_MUTED)
+
+    p = out / "affiliate_breakeven.png"
+    fig.savefig(p, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return p
+
+
 def main() -> None:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "output/images")
     out.mkdir(parents=True, exist_ok=True)
-    for p in (chart_retracement(out), chart_concentration(out)):
+    for p in (chart_retracement(out), chart_concentration(out),
+              chart_affiliate_breakeven(out)):
         print(f"생성: {p}")
 
 
