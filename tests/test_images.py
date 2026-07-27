@@ -76,3 +76,41 @@ def test_no_credit_block_when_all_public_domain(tmp_path):
     assert "[사진A] a.jpg" in txt
     # 헤더 안내문에는 단어가 등장하므로, 실제 출처 블록(줄 시작)만 검사한다
     assert not any(ln.startswith("[이미지 출처]") for ln in txt.splitlines())
+
+
+def test_markdown_table_becomes_html_table():
+    """리치 복사의 핵심이 표라, 마크다운 표는 반드시 <table>로 변환돼야 한다."""
+    from nbpipe.output.draft_writer import _md_to_html_body
+    md = "| 구분 | 값 |\n| --- | --- |\n| 이자 | 75만원 |\n"
+    out = _md_to_html_body(md)
+    assert "<table>" in out and "<th>구분</th>" in out and "<td>75만원</td>" in out
+    assert "---" not in out          # 구분선이 셀로 새어나오지 않아야 함
+    assert "<p>|" not in out         # 파이프 원문이 문단으로 남지 않아야 함
+
+
+def test_paste_html_has_copy_zone_and_buttons(tmp_path):
+    from nbpipe.models import Intent, PostDraft
+    from nbpipe.output.draft_writer import DraftWriter
+    draft = PostDraft(
+        niche=Niche.ECONOMY, primary_keyword="기준금리", title="제목",
+        intent=Intent.HOMEFEED, tags=["기준금리", "대출"],
+        body_markdown="## 소제목\n\n본문임.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+    )
+    out = DraftWriter(tmp_path)._render_paste_html(draft)
+    assert 'id="copy-body"' in out
+    assert "본문 복사" in out and "제목 복사" in out and "태그 복사" in out
+    assert "<table>" in out
+    # 복사 영역 안에 안내 UI가 섞여 들어가면 네이버 본문까지 딸려간다
+    body = out.split('<div id="copy-body">')[1]
+    assert "<button" not in body
+
+
+def test_paste_html_included_in_default_formats(tmp_path):
+    from nbpipe.models import PostDraft
+    from nbpipe.output.draft_writer import DraftWriter
+    draft = PostDraft(niche=Niche.ECONOMY, primary_keyword="금리", title="t",
+                      body_markdown="본문임.\n")
+    names = {p.suffix for p in DraftWriter(tmp_path).write(draft)}
+    assert ".html" in names and ".txt" in names and ".md" in names
+    assert any(p.name.endswith(".paste.html")
+               for p in DraftWriter(tmp_path).write(draft))

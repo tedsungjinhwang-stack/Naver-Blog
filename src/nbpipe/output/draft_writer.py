@@ -17,11 +17,24 @@ from pathlib import Path
 from nbpipe.models import CheckResult, PostDraft
 
 
+def _is_table_row(s: str) -> bool:
+    return bool(re.match(r"^\|.*\|$", s.strip()))
+
+
+def _is_table_divider(s: str) -> bool:
+    cells = [c.strip() for c in s.strip().strip("|").split("|")]
+    return bool(cells) and all(re.match(r"^:?-{2,}:?$", c) for c in cells)
+
+
 def _md_to_html_body(markdown: str) -> str:
-    """아주 가벼운 마크다운→HTML 변환(제목/목록/문단만). 외부 의존성 없이."""
+    """가벼운 마크다운→HTML 변환(제목/목록/표/문단). 외부 의존성 없이.
+
+    표는 스마트에디터가 붙여넣기로 받아주는 핵심 요소라 반드시 <table>로 변환한다.
+    """
     lines = markdown.splitlines()
     out: list[str] = []
     in_list = False
+    i, n = 0, len(lines)
 
     def close_list() -> None:
         nonlocal in_list
@@ -29,26 +42,77 @@ def _md_to_html_body(markdown: str) -> str:
             out.append("</ul>")
             in_list = False
 
-    for raw in lines:
-        line = raw.rstrip()
+    while i < n:
+        line = lines[i].rstrip()
         if not line.strip():
             close_list()
+            i += 1
             continue
+
+        # 표: 연속된 | ... | 줄 묶음
+        if _is_table_row(line):
+            close_list()
+            rows: list[list[str]] = []
+            while i < n and _is_table_row(lines[i]):
+                raw = lines[i].strip()
+                if not _is_table_divider(raw):
+                    rows.append([c.strip()
+                                 for c in raw.strip("|").split("|")])
+                i += 1
+            if rows:
+                out.append("<table>")
+                head, body = rows[0], rows[1:]
+                out.append("<thead><tr>"
+                           + "".join(f"<th>{_inline(c)}</th>" for c in head)
+                           + "</tr></thead>")
+                if body:
+                    out.append("<tbody>")
+                    for r in body:
+                        out.append("<tr>"
+                                   + "".join(f"<td>{_inline(c)}</td>" for c in r)
+                                   + "</tr>")
+                    out.append("</tbody>")
+                out.append("</table>")
+            continue
+
         h = re.match(r"^(#{1,4})\s+(.*)$", line)
         if h:
             close_list()
             level = min(len(h.group(1)) + 1, 4)  # #→h2 로 (본문 최상위는 h2)
-            out.append(f"<h{level}>{html.escape(h.group(2).strip())}</h{level}>")
+            out.append(f"<h{level}>{_inline(h.group(2).strip())}</h{level}>")
+            i += 1
             continue
+
+        # 체크리스트는 붙여넣었을 때 네모가 보이도록 문자로 바꾼다
+        cl = re.match(r"^[-*]\s+\[[ xX]\]\s+(.*)$", line)
+        if cl:
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>☐ {_inline(cl.group(1))}</li>")
+            i += 1
+            continue
+
         li = re.match(r"^[-*]\s+(.*)$", line)
         if li:
             if not in_list:
                 out.append("<ul>")
                 in_list = True
             out.append(f"<li>{_inline(li.group(1))}</li>")
+            i += 1
             continue
+
+        ol = re.match(r"^\d+\.\s+(.*)$", line)
+        if ol:
+            # 번호는 붙여넣기 후에도 유지되도록 본문에 그대로 남긴다
+            close_list()
+            out.append(f"<p>{_inline(line.strip())}</p>")
+            i += 1
+            continue
+
         close_list()
         out.append(f"<p>{_inline(line.strip())}</p>")
+        i += 1
     close_list()
     return "\n".join(out)
 
@@ -101,6 +165,111 @@ _HTML_TEMPLATE = """<!doctype html>
 <h1>{title}</h1>
 {body}
 <p class="tags">{tags}</p>
+</body>
+</html>
+"""
+
+
+_PASTE_TEMPLATE = """<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{title} — 붙여넣기</title>
+<style>
+  body {{ font-family: -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+          max-width: 860px; margin: 32px auto; padding: 0 16px; color: #191f28;
+          background: #f7f8fa; }}
+  .panel {{ background:#fff; border:1px solid #e5e8eb; border-radius:12px;
+            padding:18px 20px; margin-bottom:16px; }}
+  .meta {{ color:#6b7684; font-size:.9rem; margin:6px 0 0; }}
+  .steps {{ margin:10px 0 0; padding-left:20px; color:#333d4b; line-height:1.9;
+            font-size:.94rem; }}
+  .warn {{ background:#fff7e6; border:1px solid #ffd591; border-radius:8px;
+           padding:10px 12px; margin-top:12px; color:#873800; font-size:.9rem; }}
+  button {{ font-size:.95rem; font-weight:700; color:#fff; background:#03c75a;
+            border:0; border-radius:8px; padding:10px 16px; cursor:pointer;
+            margin-right:8px; }}
+  button:hover {{ filter:brightness(.94); }}
+  button.sub {{ background:#4e5968; }}
+  .field {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+            margin-top:10px; }}
+  .field code {{ background:#f2f4f6; padding:6px 10px; border-radius:6px;
+                 font-size:.92rem; }}
+  /* 복사 영역: 장식 금지. 여기 스타일은 붙여넣을 때 네이버로 딸려간다. */
+  #copy-body {{ background:#fff; border:1px solid #e5e8eb; border-radius:12px;
+                padding:24px; }}
+  #copy-body h2 {{ font-size:1.25rem; margin:1.6em 0 .6em; }}
+  #copy-body h3 {{ font-size:1.08rem; margin:1.3em 0 .5em; }}
+  #copy-body p  {{ margin:.7em 0; line-height:1.85; }}
+  #copy-body ul {{ margin:.7em 0; padding-left:22px; line-height:1.85; }}
+  #copy-body table {{ border-collapse:collapse; margin:1em 0; width:100%; }}
+  #copy-body th, #copy-body td {{ border:1px solid #d1d6db; padding:8px 10px;
+                                  text-align:left; font-size:.95rem; }}
+  #copy-body th {{ background:#f2f4f6; }}
+  .ok {{ color:#03a54a; font-weight:700; margin-left:6px; }}
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <strong style="font-size:1.05rem;">{title}</strong>
+  <p class="meta">{niche} · {intent} · {chars}자 · SEO {seo}</p>
+  <ol class="steps">
+    <li><b>제목 복사</b> → 네이버 에디터 제목칸에 붙여넣기</li>
+    <li><b>본문 복사</b> → 본문에 붙여넣기 (소제목·굵기·표가 서식째로 들어감)</li>
+    <li>[사진X]·[이미지N] 자리에 사진 올리고 그 표시줄은 삭제</li>
+    <li><b>태그 복사</b> → 태그칸에 붙여넣기</li>
+  </ol>
+  <div class="field">
+    <button onclick="copyText(document.getElementById('t').textContent, this)">제목 복사</button>
+    <code id="t">{title}</code>
+  </div>
+  <div class="field">
+    <button onclick="copyRich(document.getElementById('copy-body'), this)">본문 복사 (서식 유지)</button>
+    <button class="sub" onclick="copyText(document.getElementById('copy-body').innerText, this)">평문으로 복사</button>
+  </div>
+  <div class="field">
+    <button class="sub" onclick="copyText(document.getElementById('g').textContent, this)">태그 복사</button>
+    <code id="g">{tags}</code>
+  </div>
+  <div class="warn">발행 전 확인 · {credit_note}</div>
+</div>
+
+<div id="copy-body">
+{body}
+</div>
+
+<script>
+function flash(btn, msg) {{
+  var s = document.createElement('span');
+  s.className = 'ok'; s.textContent = msg;
+  btn.parentNode.insertBefore(s, btn.nextSibling);
+  setTimeout(function () {{ s.remove(); }}, 1600);
+}}
+// 서식 유지 복사: file:// 에서는 navigator.clipboard 를 못 쓰므로
+// DOM 선택 + execCommand 를 기본 경로로 둔다.
+function copyRich(el, btn) {{
+  var range = document.createRange();
+  range.selectNodeContents(el);
+  var sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  var ok = false;
+  try {{ ok = document.execCommand('copy'); }} catch (e) {{ ok = false; }}
+  sel.removeAllRanges();
+  flash(btn, ok ? '복사됨' : '복사 실패 — 직접 선택해 Ctrl+C');
+}}
+function copyText(text, btn) {{
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  var ok = false;
+  try {{ ok = document.execCommand('copy'); }} catch (e) {{ ok = false; }}
+  ta.remove();
+  flash(btn, ok ? '복사됨' : '복사 실패');
+}}
+</script>
 </body>
 </html>
 """
@@ -378,8 +547,54 @@ class DraftWriter:
         text = "\n".join(P)
         return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
+    # --- 붙여넣기 전용 HTML(서식 유지 복사) ---
+    def _render_paste_html(self, draft: PostDraft) -> str:
+        """스마트에디터에 '서식째로' 붙여넣기 위한 페이지.
+
+        복사 영역(#copy-body)에는 장식 CSS를 걸지 않는다. 브라우저가 리치 복사할 때
+        계산된 스타일을 인라인으로 실어 보내기 때문에, 색·테두리를 주면 네이버 본문에
+        그대로 딸려 들어간다. 서식은 네이버 것을 쓰게 두고 구조만 넘긴다.
+        """
+        parts: list[str] = []
+        if draft.summary:
+            parts.append(f"<p>{_inline(draft.summary.strip())}</p>")
+
+        # 대표 이미지 자리(수집 완료본)를 본문 맨 앞에 표시
+        for si, im in enumerate(draft.stock_images[:1]):
+            parts.append(f"<p>[사진A] {html.escape(im.file)} ← 대표 이미지</p>")
+
+        parts.append(_md_to_html_body(draft.body_markdown.strip()))
+
+        for i, im in enumerate(draft.image_prompts, 1):
+            parts.append(
+                f"<p>[이미지{_circ(i)}] {html.escape(im.alt or im.prompt)}</p>")
+        for si, im in enumerate(draft.stock_images[1:], start=1):
+            letter = chr(ord("A") + si)
+            parts.append(f"<p>[사진{letter}] {html.escape(im.file)}</p>")
+
+        credited = [im for im in draft.stock_images if im.needs_attribution]
+        if credited:
+            parts.append("<p>[이미지 출처]</p>")
+            for im in credited:
+                parts.append(f"<p>{html.escape(im.credit_line())}</p>")
+
+        body_html = "\n".join(parts)
+        tags = " ".join("#" + t for t in draft.tags)
+        need_n = len(credited)
+        return _PASTE_TEMPLATE.format(
+            title=html.escape(draft.title),
+            body=body_html,
+            tags=html.escape(tags),
+            niche=html.escape(draft.niche.korean),
+            intent=html.escape(draft.intent.korean),
+            chars=f"{draft.char_count():,}",
+            seo=(f"{draft.seo.score}/100" if draft.seo else "-"),
+            credit_note=(f"출처 표기 필요 이미지 {need_n}장 — 본문 하단 문구 유지"
+                         if need_n else "출처 표기 의무 있는 이미지 없음"),
+        )
+
     def write(self, draft: PostDraft, formats: list[str] | None = None) -> list[Path]:
-        formats = formats or ["markdown", "html", "naver_text"]
+        formats = formats or ["markdown", "html", "naver_text", "paste_html"]
         base = self._basename(draft)
         written: list[Path] = []
 
@@ -394,6 +609,10 @@ class DraftWriter:
         if "naver_text" in formats or "txt" in formats:
             p = self.output_dir / f"{base}.naver.txt"
             p.write_text(self._render_naver_text(draft), encoding="utf-8")
+            written.append(p)
+        if "paste_html" in formats:
+            p = self.output_dir / f"{base}.paste.html"
+            p.write_text(self._render_paste_html(draft), encoding="utf-8")
             written.append(p)
         return written
 

@@ -45,8 +45,9 @@ seo:
 
 output:
   dir: ./output
-  # markdown=검토용, html=미리보기용, naver_text=네이버 붙여넣기용(.naver.txt)
-  formats: [markdown, html, naver_text]
+  # markdown=검토용, html=미리보기, naver_text=평문(.naver.txt),
+  # paste_html=서식 유지 붙여넣기용(.paste.html) ← 실제 발행은 이걸 쓰는 게 빠름
+  formats: [markdown, html, naver_text, paste_html]
   write_run_log: true         # SQLite 실행 로그 기록
 
 images:
