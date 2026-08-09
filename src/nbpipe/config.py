@@ -80,6 +80,10 @@ _DEFAULTS: dict[str, Any] = {
         "license": None,         # 예: "cc0,pdm" (출처표기 의무 없는 것만)
         "allow_sharealike": False,
         "dir": "",               # 비우면 <output_dir>/images
+        # 공개 https 이미지 베이스 URL. 설정하면 붙여넣기용 HTML 본문에
+        # <img src="…"> 로 직접 넣어, 붙여넣을 때 사진까지 따라가게 한다.
+        # (네이버는 base64 이미지는 막지만 https 이미지는 URL로 가져간다)
+        "public_base_url": "",
     },
 }
 

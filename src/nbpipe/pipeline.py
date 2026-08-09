@@ -223,7 +223,10 @@ class Pipeline:
 
     # ---- 5) 출력 + 6) 기록 ----
     def emit(self, draft: PostDraft) -> tuple[list[Path], int | None]:
-        writer = DraftWriter(self.config.output_dir)
+        writer = DraftWriter(
+            self.config.output_dir,
+            public_base_url=self.config.images.get("public_base_url", ""),
+        )
         files = writer.write(draft, self.config.output.get("formats"))
         run_id = None
         if self.store:

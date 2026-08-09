@@ -303,9 +303,12 @@ function copyText(text, btn) {{
 
 
 class DraftWriter:
-    def __init__(self, output_dir: str | Path) -> None:
+    def __init__(self, output_dir: str | Path,
+                 public_base_url: str = "") -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # 공개 https 이미지 베이스 URL(있으면 본문에 <img> 로 직접 삽입)
+        self.public_base_url = public_base_url
 
     def _basename(self, draft: PostDraft) -> str:
         date = datetime.now().strftime("%Y%m%d")
@@ -635,10 +638,12 @@ class DraftWriter:
         sections = _split_by_heading(draft.body_markdown.strip())
         n_head = max(len(sections) - 1, 0)   # sections[0] 은 첫 소제목 이전 도입부
 
-        # 본문(복사 영역)에는 <img> 를 넣지 않는다.
-        # 스마트에디터는 붙여넣은 data URI 이미지를 '허용되지 않는 이미지'로 막고,
-        # 자체 업로더로 올린 것만 받는다. 따라서 본문은 자리표시자만 두고,
-        # 실제 이미지는 복사 영역 밖 '배치표'에서 보여준다.
+        # 복사 영역의 이미지 처리:
+        #   - base64(data:) 는 스마트에디터가 '허용되지 않는 이미지'로 막는다.
+        #   - 반면 공개 https 이미지는 웹페이지를 복사할 때처럼 URL로 가져갈 수 있다.
+        # 따라서 public_base_url 이 설정돼 있으면 <img src="https://…"> 로 넣고,
+        # 없으면 자리표시자만 두고 실제 이미지는 복사 영역 밖 '배치표'에 보여준다.
+        base_url = (self.public_base_url or "").rstrip("/")
         slots: dict[int, list[str]] = {}
         gallery: list[tuple[str, str, str, str]] = []  # (라벨, 위치, 파일명, data URI)
 
@@ -651,7 +656,11 @@ class DraftWriter:
             label = f"이미지{_circ(i)}"
             uri = self._data_uri(im.file)
             desc = im.alt or im.prompt
-            add(slot, self._placeholder_block(f"{label} {desc}"), n_head)
+            if base_url and im.file:
+                src = f"{base_url}/{Path(im.file).name}"
+                add(slot, self._img_block(src, desc, im.caption), n_head)
+            else:
+                add(slot, self._placeholder_block(f"{label} {desc}"), n_head)
             if uri:
                 gallery.append((label, im.position, Path(im.file).name, uri))
 
@@ -662,7 +671,11 @@ class DraftWriter:
             letter = chr(ord("A") + si) if si < 26 else str(si + 1)
             label = f"사진{letter}"
             note = "  ← 대표 이미지" if si == 0 else ""
-            add(slot, self._placeholder_block(f"{label} {im.file}{note}"), n_head)
+            if base_url and im.file:
+                add(slot, self._img_block(f"{base_url}/{im.file}",
+                                          im.title or im.query), n_head)
+            else:
+                add(slot, self._placeholder_block(f"{label} {im.file}{note}"), n_head)
             if uri:
                 pos = "도입부" if si == 0 else f"소제목{slot} 아래"
                 gallery.append((label, pos, im.file, uri))

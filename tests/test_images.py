@@ -162,3 +162,26 @@ def test_missing_image_file_degrades_to_placeholder(tmp_path):
     assert "data:image" not in out     # 없는 파일로 깨진 <img> 를 만들지 않는다
     assert "[이미지" in out
     assert "이미지 배치표" not in out    # 보여줄 이미지가 없으면 배치표도 안 만든다
+
+
+def test_public_base_url_puts_https_images_in_body(tmp_path):
+    """공개 URL이 설정되면 본문에 https <img> 로 넣어 붙여넣기에 사진이 따라간다."""
+    import base64
+    from nbpipe.models import ImagePrompt, PostDraft
+    from nbpipe.output.draft_writer import DraftWriter
+
+    png = tmp_path / "chart.png"
+    png.write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+    draft = PostDraft(
+        niche=Niche.INVESTING, primary_keyword="코스피", title="t",
+        body_markdown="## 첫째\n\n가.\n",
+        image_prompts=[ImagePrompt(position="소제목1 아래", alt="차트", prompt="p",
+                                   file=str(png))],
+    )
+    w = DraftWriter(tmp_path, public_base_url="https://example.com/imgs/")
+    out = w._render_paste_html(draft)
+    copy_zone = out.split('<div id="copy-body">')[1].split('<div class="panel">')[0]
+    assert '<img src="https://example.com/imgs/chart.png"' in copy_zone
+    # base64 는 네이버가 막으므로 본문에 절대 들어가면 안 된다
+    assert "data:image" not in copy_zone

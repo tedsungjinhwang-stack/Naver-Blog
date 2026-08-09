@@ -58,6 +58,11 @@ images:
   license: null            # 예: "cc0,pdm" → 출처 표기 의무 없는 것만
   allow_sharealike: false  # BY-SA 포함 여부(기본 제외)
   dir: ""                  # 비우면 <output.dir>/images
+  # 공개 https 이미지 주소. 설정하면 붙여넣기용 HTML 본문에 <img> 로 들어가서
+  # 붙여넣을 때 사진까지 함께 들어간다(네이버는 base64는 막고 https는 가져감).
+  # 예) GitHub 공개 저장소에 이미지를 커밋한 뒤 raw 주소를 넣는다:
+  # public_base_url: "https://raw.githubusercontent.com/<user>/<repo>/<branch>/assets/posts/<slug>"
+  public_base_url: ""
   # NC(비영리)·ND(변경금지)는 항상 제외한다. 애드포스트 수익화 시 상업적 이용에
   # 해당하고, 크롭·리사이즈가 필요하기 때문.
 
