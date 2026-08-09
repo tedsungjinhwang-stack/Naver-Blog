@@ -166,6 +166,7 @@ class ImagePrompt:
     alt: str             # 대체텍스트(키워드 포함 권장)
     prompt: str          # 이미지 생성/삽입 가이드
     caption: str = ""
+    file: str = ""       # 실제 이미지 경로(있으면 붙여넣기용 HTML에 그대로 삽입)
 
 
 # 출처 표기 의무가 없는 라이선스(퍼블릭 도메인 계열 + 자체 라이선스)

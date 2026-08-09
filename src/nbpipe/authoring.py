@@ -80,6 +80,7 @@ def parse_authored_post(path: str | Path) -> PostDraft:
             alt=str(im.get("alt", "")),
             prompt=str(im.get("prompt", "")),
             caption=str(im.get("caption", "")),
+            file=str(im.get("file", "")),
         )
         for im in (meta.get("image_prompts") or [])
         if isinstance(im, dict)

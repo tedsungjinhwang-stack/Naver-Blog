@@ -9,12 +9,29 @@
 """
 from __future__ import annotations
 
+import base64
 import html
 import re
 from datetime import datetime
 from pathlib import Path
 
 from nbpipe.models import CheckResult, PostDraft
+
+
+def _split_by_heading(markdown: str) -> list[str]:
+    """본문을 소제목(## …) 단위로 쪼갠다.
+
+    반환[0] 은 첫 소제목 이전(도입부), 이후 각 원소는 '소제목 + 그 아래 본문'.
+    이미지 자리('소제목N 아래')를 정확히 끼워 넣기 위해 필요하다.
+    """
+    lines = markdown.splitlines()
+    sections: list[list[str]] = [[]]
+    for ln in lines:
+        if re.match(r"^#{2,4}\s+", ln.strip()):
+            sections.append([ln])
+        else:
+            sections[-1].append(ln)
+    return ["\n".join(sec).strip() for sec in sections]
 
 
 def _is_table_row(s: str) -> bool:
@@ -206,6 +223,8 @@ _PASTE_TEMPLATE = """<!doctype html>
   #copy-body th, #copy-body td {{ border:1px solid #d1d6db; padding:8px 10px;
                                   text-align:left; font-size:.95rem; }}
   #copy-body th {{ background:#f2f4f6; }}
+  #copy-body img {{ max-width:100%; height:auto; display:block; margin:14px 0; }}
+  #copy-body .cap {{ color:#6b7684; font-size:.9rem; margin:-6px 0 14px; }}
   .ok {{ color:#03a54a; font-weight:700; margin-left:6px; }}
 </style>
 </head>
@@ -217,7 +236,7 @@ _PASTE_TEMPLATE = """<!doctype html>
   <ol class="steps">
     <li><b>제목 복사</b> → 네이버 에디터 제목칸에 붙여넣기</li>
     <li><b>본문 복사</b> → 본문에 붙여넣기 (소제목·굵기·표가 서식째로 들어감)</li>
-    <li>[사진X]·[이미지N] 자리에 사진 올리고 그 표시줄은 삭제</li>
+    <li>사진은 이미 제자리에 들어 있음. [대괄호] 표시만 남은 자리는 직접 촬영·제작해 채우기</li>
     <li><b>태그 복사</b> → 태그칸에 붙여넣기</li>
   </ol>
   <div class="field">
@@ -548,6 +567,55 @@ class DraftWriter:
         return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
     # --- 붙여넣기 전용 HTML(서식 유지 복사) ---
+    def _data_uri(self, path_str: str) -> str | None:
+        """이미지 파일 → base64 data URI.
+
+        복사한 HTML에 이미지 데이터를 실어 보내려면 file:// 경로가 아니라
+        data URI 여야 한다. 파일이 없으면 None.
+        """
+        if not path_str:
+            return None
+        p = Path(path_str)
+        if not p.is_absolute():
+            for base in (self.output_dir, self.output_dir.parent, Path.cwd()):
+                cand = base / p
+                if cand.exists():
+                    p = cand
+                    break
+        if not p.exists() or not p.is_file():
+            return None
+        mime = {
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp",
+        }.get(p.suffix.lower())
+        if not mime:
+            return None
+        try:
+            raw = p.read_bytes()
+        except OSError:
+            return None
+        return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+    def _img_block(self, uri: str, alt: str, caption: str = "") -> str:
+        cap = (f'<p class="cap">{html.escape(caption)}</p>' if caption else "")
+        return (f'<p><img src="{uri}" alt="{html.escape(alt)}"></p>' + cap)
+
+    def _placeholder_block(self, label: str) -> str:
+        return f'<p>[{html.escape(label)}]</p>'
+
+    def _slot_index(self, position: str, n_headings: int) -> int | None:
+        """'소제목3 아래' → 3번째 소제목 뒤. 도입부/마무리도 해석."""
+        pos = position or ""
+        m = re.search(r"소제목\s*(\d+)", pos)
+        if m:
+            i = int(m.group(1))
+            return i if 1 <= i <= n_headings else None
+        if "도입" in pos or "상단" in pos:
+            return 0
+        if "마무리" in pos or "끝" in pos:
+            return n_headings
+        return None
+
     def _render_paste_html(self, draft: PostDraft) -> str:
         """스마트에디터에 '서식째로' 붙여넣기 위한 페이지.
 
@@ -555,22 +623,45 @@ class DraftWriter:
         계산된 스타일을 인라인으로 실어 보내기 때문에, 색·테두리를 주면 네이버 본문에
         그대로 딸려 들어간다. 서식은 네이버 것을 쓰게 두고 구조만 넘긴다.
         """
+        # 본문을 소제목 단위로 쪼갠 뒤, 각 이미지를 지정된 자리에 끼워 넣는다.
+        sections = _split_by_heading(draft.body_markdown.strip())
+        n_head = max(len(sections) - 1, 0)   # sections[0] 은 첫 소제목 이전 도입부
+
+        slots: dict[int, list[str]] = {}
+        embedded = 0
+
+        def add(slot: int | None, block: str, fallback_slot: int) -> None:
+            slots.setdefault(fallback_slot if slot is None else slot, []).append(block)
+
+        # 1) front-matter 이미지: file 이 있으면 실제 이미지, 없으면 자리표시자
+        for i, im in enumerate(draft.image_prompts, 1):
+            slot = self._slot_index(im.position, n_head)
+            uri = self._data_uri(im.file)
+            if uri:
+                add(slot, self._img_block(uri, im.alt or im.prompt, im.caption), n_head)
+                embedded += 1
+            else:
+                label = f"이미지{_circ(i)} {im.alt or im.prompt}"
+                add(slot, self._placeholder_block(label), n_head)
+
+        # 2) 수집한 스톡 이미지: 첫 장은 도입부(대표), 나머지는 뒤쪽 소제목에 분산
+        for si, im in enumerate(draft.stock_images):
+            uri = self._data_uri(im.path or im.file)
+            slot = 0 if si == 0 else min(si, n_head)
+            letter = chr(ord("A") + si) if si < 26 else str(si + 1)
+            if uri:
+                add(slot, self._img_block(uri, im.title or im.query), n_head)
+                embedded += 1
+            else:
+                add(slot, self._placeholder_block(f"사진{letter} {im.file}"), n_head)
+
         parts: list[str] = []
         if draft.summary:
             parts.append(f"<p>{_inline(draft.summary.strip())}</p>")
-
-        # 대표 이미지 자리(수집 완료본)를 본문 맨 앞에 표시
-        for si, im in enumerate(draft.stock_images[:1]):
-            parts.append(f"<p>[사진A] {html.escape(im.file)} ← 대표 이미지</p>")
-
-        parts.append(_md_to_html_body(draft.body_markdown.strip()))
-
-        for i, im in enumerate(draft.image_prompts, 1):
-            parts.append(
-                f"<p>[이미지{_circ(i)}] {html.escape(im.alt or im.prompt)}</p>")
-        for si, im in enumerate(draft.stock_images[1:], start=1):
-            letter = chr(ord("A") + si)
-            parts.append(f"<p>[사진{letter}] {html.escape(im.file)}</p>")
+        for idx, sec in enumerate(sections):
+            if sec.strip():
+                parts.append(_md_to_html_body(sec))
+            parts.extend(slots.get(idx, []))
 
         credited = [im for im in draft.stock_images if im.needs_attribution]
         if credited:
@@ -579,6 +670,7 @@ class DraftWriter:
                 parts.append(f"<p>{html.escape(im.credit_line())}</p>")
 
         body_html = "\n".join(parts)
+        self._last_embedded = embedded
         tags = " ".join("#" + t for t in draft.tags)
         need_n = len(credited)
         return _PASTE_TEMPLATE.format(

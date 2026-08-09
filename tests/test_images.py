@@ -114,3 +114,47 @@ def test_paste_html_included_in_default_formats(tmp_path):
     assert ".html" in names and ".txt" in names and ".md" in names
     assert any(p.name.endswith(".paste.html")
                for p in DraftWriter(tmp_path).write(draft))
+
+
+def test_images_embedded_at_their_slots(tmp_path):
+    """front-matter 의 file 이 지정된 이미지는 지정한 소제목 자리에 삽입돼야 한다."""
+    import base64
+    from nbpipe.models import ImagePrompt, PostDraft
+    from nbpipe.output.draft_writer import DraftWriter
+
+    png = tmp_path / "a.png"
+    # 1x1 PNG
+    png.write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+    draft = PostDraft(
+        niche=Niche.INVESTING, primary_keyword="코스피", title="t",
+        body_markdown="## 첫째\n\n가.\n\n## 둘째\n\n나.\n",
+        image_prompts=[
+            ImagePrompt(position="소제목2 아래", alt="차트", prompt="p",
+                        file=str(png)),
+            ImagePrompt(position="소제목1 아래", alt="없는파일", prompt="직접 촬영"),
+        ],
+    )
+    out = DraftWriter(tmp_path)._render_paste_html(draft)
+    body = out.split('<div id="copy-body">')[1]
+    assert 'src="data:image/png;base64,' in body      # 파일 있는 건 임베드
+    assert "[이미지" in body                            # 파일 없는 건 자리표시자
+
+    # 두 번째 소제목 뒤에 이미지가 오는지(자리 정확도)
+    i_h2 = body.index("둘째")
+    i_img = body.index('src="data:image/png')
+    assert i_img > i_h2
+
+
+def test_missing_image_file_degrades_to_placeholder(tmp_path):
+    from nbpipe.models import ImagePrompt, PostDraft
+    from nbpipe.output.draft_writer import DraftWriter
+    draft = PostDraft(
+        niche=Niche.ECONOMY, primary_keyword="금리", title="t",
+        body_markdown="## 첫째\n\n가.\n",
+        image_prompts=[ImagePrompt(position="소제목1 아래", alt="x", prompt="y",
+                                   file="없는경로/nope.png")],
+    )
+    out = DraftWriter(tmp_path)._render_paste_html(draft)
+    assert "data:image" not in out     # 없는 파일로 깨진 <img> 를 만들지 않는다
+    assert "[이미지" in out

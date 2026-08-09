@@ -14,9 +14,11 @@ image_prompts:
   - position: 소제목2 아래
     alt: 쌍바닥 W 패턴 개념도
     prompt: 1차 저점·반등·2차 저점·넥라인을 표시한 쌍바닥 개념도(직접 제작)
+    file: output/images/double_bottom.png
   - position: 소제목3 아래
-    alt: 되돌림 레벨과 5000 구간
-    prompt: 0.382·0.5·0.618 되돌림 레벨을 표시한 계산 도표(직접 제작)
+    alt: 코스피 하락 경로와 되돌림 레벨
+    prompt: 확인된 종가를 이은 하락 경로 + 되돌림 밴드(직접 제작)
+    file: output/images/kospi_retracement.png
   - position: 소제목4 아래
     alt: 쌍바닥 성립 조건 체크리스트
     prompt: 지지·거래량·넥라인 3가지 조건을 정리한 직접 만든 표
