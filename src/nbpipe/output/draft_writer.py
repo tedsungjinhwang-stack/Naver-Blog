@@ -226,6 +226,12 @@ _PASTE_TEMPLATE = """<!doctype html>
   #copy-body img {{ max-width:100%; height:auto; display:block; margin:14px 0; }}
   #copy-body .cap {{ color:#6b7684; font-size:.9rem; margin:-6px 0 14px; }}
   .ok {{ color:#03a54a; font-weight:700; margin-left:6px; }}
+  .gitem {{ margin:16px 0 20px; }}
+  .glabel {{ font-weight:700; font-size:.95rem; margin-bottom:6px; }}
+  .glabel span {{ font-weight:400; color:#6b7684; margin-left:6px; }}
+  .gitem img {{ max-width:100%; border:1px solid #e5e8eb; border-radius:8px;
+                display:block; }}
+  .gfile {{ color:#8b95a1; font-size:.85rem; margin-top:5px; }}
 </style>
 </head>
 <body>
@@ -236,7 +242,7 @@ _PASTE_TEMPLATE = """<!doctype html>
   <ol class="steps">
     <li><b>제목 복사</b> → 네이버 에디터 제목칸에 붙여넣기</li>
     <li><b>본문 복사</b> → 본문에 붙여넣기 (소제목·굵기·표가 서식째로 들어감)</li>
-    <li>사진은 이미 제자리에 들어 있음. [대괄호] 표시만 남은 자리는 직접 촬영·제작해 채우기</li>
+    <li>[사진X]·[이미지N] 자리에 사진을 올리고 그 표시줄은 삭제<br>        (네이버는 붙여넣은 이미지를 막으므로 에디터의 사진 버튼으로 업로드)</li>
     <li><b>태그 복사</b> → 태그칸에 붙여넣기</li>
   </ol>
   <div class="field">
@@ -257,6 +263,8 @@ _PASTE_TEMPLATE = """<!doctype html>
 <div id="copy-body">
 {body}
 </div>
+
+{gallery}
 
 <script>
 function flash(btn, msg) {{
@@ -627,33 +635,37 @@ class DraftWriter:
         sections = _split_by_heading(draft.body_markdown.strip())
         n_head = max(len(sections) - 1, 0)   # sections[0] 은 첫 소제목 이전 도입부
 
+        # 본문(복사 영역)에는 <img> 를 넣지 않는다.
+        # 스마트에디터는 붙여넣은 data URI 이미지를 '허용되지 않는 이미지'로 막고,
+        # 자체 업로더로 올린 것만 받는다. 따라서 본문은 자리표시자만 두고,
+        # 실제 이미지는 복사 영역 밖 '배치표'에서 보여준다.
         slots: dict[int, list[str]] = {}
-        embedded = 0
+        gallery: list[tuple[str, str, str, str]] = []  # (라벨, 위치, 파일명, data URI)
 
         def add(slot: int | None, block: str, fallback_slot: int) -> None:
             slots.setdefault(fallback_slot if slot is None else slot, []).append(block)
 
-        # 1) front-matter 이미지: file 이 있으면 실제 이미지, 없으면 자리표시자
+        # 1) front-matter 이미지
         for i, im in enumerate(draft.image_prompts, 1):
             slot = self._slot_index(im.position, n_head)
+            label = f"이미지{_circ(i)}"
             uri = self._data_uri(im.file)
+            desc = im.alt or im.prompt
+            add(slot, self._placeholder_block(f"{label} {desc}"), n_head)
             if uri:
-                add(slot, self._img_block(uri, im.alt or im.prompt, im.caption), n_head)
-                embedded += 1
-            else:
-                label = f"이미지{_circ(i)} {im.alt or im.prompt}"
-                add(slot, self._placeholder_block(label), n_head)
+                gallery.append((label, im.position, Path(im.file).name, uri))
 
         # 2) 수집한 스톡 이미지: 첫 장은 도입부(대표), 나머지는 뒤쪽 소제목에 분산
         for si, im in enumerate(draft.stock_images):
             uri = self._data_uri(im.path or im.file)
             slot = 0 if si == 0 else min(si, n_head)
             letter = chr(ord("A") + si) if si < 26 else str(si + 1)
+            label = f"사진{letter}"
+            note = "  ← 대표 이미지" if si == 0 else ""
+            add(slot, self._placeholder_block(f"{label} {im.file}{note}"), n_head)
             if uri:
-                add(slot, self._img_block(uri, im.title or im.query), n_head)
-                embedded += 1
-            else:
-                add(slot, self._placeholder_block(f"사진{letter} {im.file}"), n_head)
+                pos = "도입부" if si == 0 else f"소제목{slot} 아래"
+                gallery.append((label, pos, im.file, uri))
 
         parts: list[str] = []
         if draft.summary:
@@ -670,12 +682,30 @@ class DraftWriter:
                 parts.append(f"<p>{html.escape(im.credit_line())}</p>")
 
         body_html = "\n".join(parts)
-        self._last_embedded = embedded
+
+        if gallery:
+            g: list[str] = ['<div class="panel"><strong>이미지 배치표</strong>',
+                            '<p class="meta">본문의 같은 이름 자리에 넣으세요. '
+                            '에디터의 사진 버튼으로 파일을 올리거나, 아래 이미지를 '
+                            '우클릭 → 이미지 복사 후 붙여넣으면 됩니다.</p>']
+            for label, pos, fname, uri in gallery:
+                g.append(
+                    '<div class="gitem">'
+                    f'<div class="glabel">[{html.escape(label)}] '
+                    f'<span>{html.escape(pos)}</span></div>'
+                    f'<img src="{uri}" alt="{html.escape(label)}">'
+                    f'<div class="gfile">{html.escape(fname)}</div>'
+                    '</div>')
+            g.append("</div>")
+            gallery_html = "\n".join(g)
+        else:
+            gallery_html = ""
         tags = " ".join("#" + t for t in draft.tags)
         need_n = len(credited)
         return _PASTE_TEMPLATE.format(
             title=html.escape(draft.title),
             body=body_html,
+            gallery=gallery_html,
             tags=html.escape(tags),
             niche=html.escape(draft.niche.korean),
             intent=html.escape(draft.intent.korean),

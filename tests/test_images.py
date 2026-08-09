@@ -136,14 +136,17 @@ def test_images_embedded_at_their_slots(tmp_path):
         ],
     )
     out = DraftWriter(tmp_path)._render_paste_html(draft)
-    body = out.split('<div id="copy-body">')[1]
-    assert 'src="data:image/png;base64,' in body      # 파일 있는 건 임베드
-    assert "[이미지" in body                            # 파일 없는 건 자리표시자
+    copy_zone = out.split('<div id="copy-body">')[1].split('<div class="panel">')[0]
+    # 네이버는 붙여넣은 data URI 를 '허용되지 않는 이미지'로 막으므로
+    # 복사 영역에는 이미지가 절대 들어가면 안 된다.
+    assert "<img" not in copy_zone
+    assert "data:image" not in copy_zone
+    assert "[이미지" in copy_zone                       # 자리표시자는 있어야 함
 
-    # 두 번째 소제목 뒤에 이미지가 오는지(자리 정확도)
-    i_h2 = body.index("둘째")
-    i_img = body.index('src="data:image/png')
-    assert i_img > i_h2
+    # 실제 이미지는 복사 영역 밖 '배치표'에서 위치와 함께 보여준다
+    gallery = out.split("이미지 배치표")[-1]
+    assert 'src="data:image/png;base64,' in gallery
+    assert "소제목2 아래" in gallery
 
 
 def test_missing_image_file_degrades_to_placeholder(tmp_path):
@@ -158,3 +161,4 @@ def test_missing_image_file_degrades_to_placeholder(tmp_path):
     out = DraftWriter(tmp_path)._render_paste_html(draft)
     assert "data:image" not in out     # 없는 파일로 깨진 <img> 를 만들지 않는다
     assert "[이미지" in out
+    assert "이미지 배치표" not in out    # 보여줄 이미지가 없으면 배치표도 안 만든다
