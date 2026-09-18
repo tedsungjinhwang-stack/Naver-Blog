@@ -40,7 +40,12 @@ C_BAND = "#f4f6f8"
 CFG = {
     "low": 2417,          # 이번 대세 상승의 시작 저점(2024년 저점권)
     "high": 9385,         # 2026-06-19 사상 최고가
-    "current": 6259,      # 최근 종가(2026-08-07, 발행 시 갱신)
+    "current": 6715,      # 최근 종가(2026-09-17, 발행 시 갱신)
+    # 아래로 한 번 더 찌를 것으로 보는 되돌림 레벨(0.382/0.5/0.618 중 하나)
+    "target": "0.5",
+    # 최근 횡보 박스(하단, 상단). None 이면 표시하지 않는다.
+    "box": (6200, 7000),
+    "box_from": "8/7",    # 박스 구간이 시작되는 path 라벨
     "semi_share": 50,     # 삼성전자+SK하이닉스 지수 시총 비중(%) — '절반 이상'
     # 하락 경로에 찍을 '실제 확인된 종가'만 넣는다. 없는 날짜를 지어내지 말 것.
     "path": [
@@ -48,6 +53,10 @@ CFG = {
         ("7/13", 6881),
         ("7/23", 7097),
         ("8/7", 6259),
+        ("9/3", 6579),
+        ("9/4", 6687),
+        ("9/14", 6684),
+        ("9/17", 6715),
     ],
 }
 
@@ -73,8 +82,9 @@ def chart_retracement(out: Path) -> Path:
     labels = [d for d, _ in path]
     vals = [v for _, v in path]
 
+    tgt = CFG.get("target", "0.618")
     top = high + 450
-    bottom = lv["0.618"] - 450
+    bottom = min(lv["0.618"], lv[tgt]) - 450
     fig, ax = plt.subplots(figsize=(8.6, 5.8), dpi=200)
     ax.set_ylim(bottom, top)
     ax.set_xlim(-0.55, len(vals) - 1 + 2.1)   # 오른쪽에 레벨 라벨 자리
@@ -89,12 +99,28 @@ def chart_retracement(out: Path) -> Path:
     for y0, y1, c in bands:
         ax.axhspan(y0, y1, color=c, zorder=0)
 
+    # 최근 횡보 박스
+    box = CFG.get("box")
+    if box:
+        try:
+            x0 = labels.index(CFG.get("box_from", labels[0])) - 0.25
+        except ValueError:
+            x0 = 0
+        ax.add_patch(Rectangle((x0, box[0]), (len(vals) - 1 + 0.35) - x0,
+                               box[1] - box[0], facecolor="#2f6fdb",
+                               alpha=0.07, edgecolor="#2f6fdb", lw=1.1,
+                               ls="--", zorder=1))
+        ax.text(x0 + 0.12, box[1] - 60,
+                f"한 달 박스권  {box[0]:,}~{box[1]:,}", color=C_DOWN,
+                fontsize=10.5, fontweight="bold", va="top", zorder=6)
+
     # 되돌림 레벨선 + 오른쪽 라벨
     for y, name, color, bold in [
-        (lv["0.382"], "0.382", C_MUTED, False),
-        (lv["0.5"], "0.5", C_MUTED, False),
-        (lv["0.618"], "0.618", C_DOWN, True),
+        (lv["0.382"], "0.382", C_MUTED, tgt == "0.382"),
+        (lv["0.5"], "0.5", C_MUTED, tgt == "0.5"),
+        (lv["0.618"], "0.618", C_MUTED, tgt == "0.618"),
     ]:
+        color = C_DOWN if bold else color
         ax.axhline(y, color=color, lw=1.6 if bold else 1.2,
                    ls="-" if bold else ":", zorder=2)
         ax.text(len(vals) - 1 + 0.18, y, f"{name} 되돌림  {y:,.0f}",
@@ -117,17 +143,17 @@ def chart_retracement(out: Path) -> Path:
         ax.text(x, v + dy, f"{v:,}", ha="center", va=va, fontsize=11.5,
                 fontweight="bold", color=C_TEXT, zorder=6)
 
-    # 현재에서 0.618 까지 남은 거리
+    # 현재에서 목표 되돌림까지 남은 거리
     cur = vals[-1]
-    remain = (lv["0.618"] / cur - 1) * 100
-    ax.annotate("", xy=(len(vals) - 1, lv["0.618"]), xytext=(len(vals) - 1, cur),
+    remain = (lv[tgt] / cur - 1) * 100
+    ax.annotate("", xy=(len(vals) - 1, lv[tgt]), xytext=(len(vals) - 1, cur),
                 arrowprops=dict(arrowstyle="->", color=C_DOWN, lw=2), zorder=6)
-    ax.text(len(vals) - 1 - 0.12, (cur + lv["0.618"]) / 2,
+    ax.text(len(vals) - 1 - 0.12, (cur + lv[tgt]) / 2,
             f"{remain:.0f}%", color=C_DOWN, fontsize=13, fontweight="bold",
             ha="right", va="center", zorder=6)
 
     drop = (cur / high - 1) * 100
-    ax.set_title(f"코스피, 고점 대비 {drop:.0f}% · 0.618 되돌림은 {lv['0.618']:,.0f}",
+    ax.set_title(f"코스피, 고점 대비 {drop:.0f}% · {tgt} 되돌림은 {lv[tgt]:,.0f}",
                  fontsize=16.5, fontweight="bold", color=C_TEXT, pad=16)
     ax.set_xticks(xs)
     ax.set_xticklabels(labels, fontsize=11.5, color=C_MUTED)
