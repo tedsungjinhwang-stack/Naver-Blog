@@ -131,18 +131,21 @@ class Pipeline:
         부록(블로그별 상세 프로파일)은 참고용이라 브리핑엔 넣지 않고,
         본 가이드(섹션 0~8)만 주입한다.
         """
-        p = self.config.root / "knowledge" / "style_reference.md"
-        if not p.exists():
-            return ""
-        try:
-            text = p.read_text(encoding="utf-8")
-        except Exception:
-            return ""
-        marker = "# 부록:"
-        idx = text.find(marker)
-        if idx != -1:
-            text = text[:idx].rstrip()
-        return text[:limit]
+        # 최신 실독 분석(20x20)을 우선 넣고, 남는 자리에 기존 가이드를 덧붙인다.
+        parts: list[str] = []
+        for name in ("style_20x20.md", "style_reference.md"):
+            p = self.config.root / "knowledge" / name
+            if not p.exists():
+                continue
+            try:
+                text = p.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            idx = text.find("# 부록:")
+            if idx != -1:
+                text = text[:idx].rstrip()
+            parts.append(text)
+        return "\n\n".join(parts)[:limit]
 
     # ---- 3) 세션/수동 작성 경로 ----
     def make_brief(
